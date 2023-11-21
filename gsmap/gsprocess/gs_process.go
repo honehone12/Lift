@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"lift/gs/gsparams"
+	"lift/gsmap/gsparams"
 	"lift/logger"
 	"os/exec"
 )

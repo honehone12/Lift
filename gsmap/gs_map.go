@@ -2,7 +2,7 @@ package gsmap
 
 import (
 	"errors"
-	"lift/gs/gs"
+	"lift/gsmap/gs"
 	"sync"
 )
 

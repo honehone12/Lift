@@ -1,8 +1,8 @@
 package gs
 
 import (
-	"lift/gs/gsparams"
-	"lift/gs/gsprocess"
+	"lift/gsmap/gsparams"
+	"lift/gsmap/gsprocess"
 
 	"github.com/gorilla/websocket"
 )

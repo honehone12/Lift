@@ -1,7 +1,7 @@
 package context
 
 import (
-	"lift/gs/gsmap"
+	"lift/gsmap"
 
 	"github.com/gorilla/websocket"
 )

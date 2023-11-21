@@ -1,8 +1,8 @@
 package main
 
 import (
-	"lift/gs/gsparams"
-	"lift/gs/gsprocess"
+	"lift/gsmap/gsparams"
+	"lift/gsmap/gsprocess"
 	"lift/server"
 	"lift/server/context"
 
