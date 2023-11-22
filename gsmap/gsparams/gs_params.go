@@ -1,12 +1,19 @@
 package gsparams
 
-import libuuid "github.com/google/uuid"
+import (
+	"fmt"
+	"time"
+
+	libuuid "github.com/google/uuid"
+)
 
 type GSParams struct {
-	Process string
-	Uuid    libuuid.UUID
-	Address string
-	Port    string
+	process string
+	uuid    libuuid.UUID
+	address string
+	port    string
+
+	monitoringTimeout time.Duration
 }
 
 func NewGSParams(
@@ -14,27 +21,37 @@ func NewGSParams(
 	uuid libuuid.UUID,
 	address string,
 	port string,
+	monitoringTimeout time.Duration,
 ) *GSParams {
 	return &GSParams{
-		Process: process,
-		Uuid:    uuid,
-		Address: address,
-		Port:    port,
+		process:           process,
+		uuid:              uuid,
+		address:           address,
+		port:              port,
+		monitoringTimeout: monitoringTimeout,
 	}
 }
 
 func (p *GSParams) ProcessName() string {
-	return p.Process
+	return p.process
 }
 
 func (p *GSParams) UuidString() string {
-	return p.Uuid.String()
+	return p.uuid.String()
 }
 
 func (p *GSParams) ToArgs() []string {
 	return []string{
-		"-a", p.Address,
-		"-p", p.Port,
-		"-u", p.Uuid.String(),
+		"-a", p.address,
+		"-p", p.port,
+		"-u", p.uuid.String(),
 	}
+}
+
+func (p *GSParams) NextMonitoringTimeout() time.Time {
+	return time.Now().Add(p.monitoringTimeout)
+}
+
+func (p *GSParams) LogFormat(msg string) string {
+	return fmt.Sprintf("GS PROCESS [%s] ", p.uuid.String()) + msg
 }

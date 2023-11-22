@@ -50,7 +50,7 @@ func (h *DummyConnectionHandle) SendMonitoringMessage(param *DummyParams) {
 }
 
 func serverURL(uuid string) string {
-	return fmt.Sprintf("ws://127.0.0.1:9990/%s", uuid)
+	return fmt.Sprintf("ws://127.0.0.1:9990/connect/%s", uuid)
 }
 
 func parseFlags() *DummyParams {

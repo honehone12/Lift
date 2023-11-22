@@ -3,6 +3,8 @@ package gsmap
 import (
 	"errors"
 	"lift/gsmap/gs"
+	"lift/gsmap/gsparams"
+	"lift/logger"
 	"sync"
 )
 
@@ -27,13 +29,27 @@ func (m *GSMap) Count() int {
 	return m.count
 }
 
-func (m *GSMap) Add(id string, gs *gs.GS) {
+func (m *GSMap) Launch(params *gsparams.GSParams, logger logger.Logger) error {
+	gs, err := gs.NewGS(params, logger)
+	if err != nil {
+		return err
+	}
+
+	if gs.StartProcess(); err != nil {
+		return err
+	}
+
+	m.add(params.UuidString(), gs)
+	return nil
+}
+
+func (m *GSMap) add(id string, gs *gs.GS) {
 	if _, exists := m.inner.LoadOrStore(id, gs); !exists {
 		m.count++
 	}
 }
 
-func (m *GSMap) Remove(id string) {
+func (m *GSMap) remove(id string) {
 	if _, exists := m.inner.LoadAndDelete(id); exists {
 		m.count--
 	}

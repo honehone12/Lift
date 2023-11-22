@@ -47,6 +47,6 @@ func Connect(c echo.Context) error {
 		return errres.ServerError(err, c.Logger())
 	}
 
-	gs.SetWSConnection(conn)
+	gs.StartListen(conn)
 	return nil
 }
