@@ -1,12 +1,13 @@
 package service
 
 import (
-	"lift/gsmap/gsparams"
+	"lift/brain"
+	"lift/brain/portman"
+	"lift/gsmap"
 	"lift/server"
 	"lift/server/context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 )
@@ -14,32 +15,46 @@ import (
 const (
 	ServiceName    = "LiftService"
 	ServiceVersion = "0.0.1"
-
 	ServerListenAt = "127.0.0.1:9990"
 
-	MonitoringTimeout  = time.Second * 5
-	InitialGSProcesses = 1
-	GSProcessName      = "dummy"
-	GSListenAddress    = "127.0.0.1"
+	GSMonitoringTimeout = time.Second * 5
+	InitialGSProcesses  = 1
+	GSProcessName       = "dummy"
+	GSListenAddress     = "127.0.0.1"
+
+	PortCapacity  = 100
+	PortStartFrom = 7777
 )
 
 func Run() {
 	e := echo.New()
-	c := context.NewComponents(
-		context.NewMetadata(ServiceName, ServiceVersion),
-	)
-	p := server.NewServerParams(ServerListenAt, log.DEBUG)
-	s := server.NewServer(e, c, p)
+	gsm := gsmap.NewGSMap(e.Logger)
+	b, err := brain.NewBrain(&brain.BrainParams{
+		GSProcessName:       GSProcessName,
+		GSListenAddress:     GSListenAddress,
+		GSMonitoringTimeout: GSMonitoringTimeout,
+		PortParams: portman.PortManParams{
+			InitialCapacity: PortCapacity,
+			StartFrom:       PortStartFrom,
+		},
+	}, gsm)
+	if err != nil {
+		e.Logger.Fatal(err)
+	}
 
+	s := server.NewServer(e,
+		context.NewComponents(
+			context.NewMetadata(ServiceName, ServiceVersion),
+			gsm,
+			b,
+		),
+		server.NewServerParams(ServerListenAt, log.DEBUG),
+	)
 	errCh := s.Run()
 
-	c.GSMap().Launch(gsparams.NewGSParams(
-		GSProcessName,
-		uuid.New(),
-		GSListenAddress,
-		"7777",
-		MonitoringTimeout,
-	), e.Logger)
+	if err = b.Launch(InitialGSProcesses); err != nil {
+		e.Logger.Fatal(err)
+	}
 
 	e.Logger.Fatal(<-errCh)
 }

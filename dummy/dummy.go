@@ -31,20 +31,31 @@ func (h *DummyConnectionHandle) SendMonitoringMessage(param *DummyParams) {
 	ticker := time.Tick(time.Second)
 	rawUuid := param.RawUuid()
 
+	count := 0
+	add := 1
+
 	for range ticker {
-		if rand.Intn(100)%7 == 0 {
-			panic("error of 7")
+		if rand.Intn(100) == 7 {
+			panic("error of lucky 7")
 		}
 
 		msg := monitor.MonitoringMessage{
 			GuidRaw:            rawUuid[:],
-			ConnectionCount:    rand.Intn(100),
-			SessionCount:       rand.Intn(100),
-			ActiveSessionCount: rand.Intn(100),
+			ConnectionCount:    count,
+			SessionCount:       count,
+			ActiveSessionCount: count,
 		}
 		if err := h.conn.WriteJSON(&msg); err != nil {
 			panic(err)
 		}
+
+		if count == 10 {
+			add = -1
+		} else if count == 0 {
+			add = 1
+		}
+
+		count += add
 		fmt.Println("sent a monitoring message")
 	}
 }
@@ -82,7 +93,7 @@ func connect(param *DummyParams) (*DummyConnectionHandle, error) {
 
 func main() {
 	params := parseFlags()
-	fmt.Printf("dummy is starting at %s:%s as [%s]",
+	fmt.Printf("dummy is starting at %s:%s as [%s]\n",
 		params.Address,
 		params.Port,
 		params.Uuid,

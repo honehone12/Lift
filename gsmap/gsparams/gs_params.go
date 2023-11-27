@@ -2,6 +2,7 @@ package gsparams
 
 import (
 	"fmt"
+	"lift/brain/portman/port"
 	"time"
 
 	libuuid "github.com/google/uuid"
@@ -9,18 +10,18 @@ import (
 
 type GSParams struct {
 	process string
-	uuid    libuuid.UUID
+	uuid    [16]byte
 	address string
-	port    string
+	port    port.Port
 
 	monitoringTimeout time.Duration
 }
 
 func NewGSParams(
 	process string,
-	uuid libuuid.UUID,
+	uuid [16]byte,
 	address string,
-	port string,
+	port port.Port,
 	monitoringTimeout time.Duration,
 ) *GSParams {
 	return &GSParams{
@@ -37,14 +38,14 @@ func (p *GSParams) ProcessName() string {
 }
 
 func (p *GSParams) UuidString() string {
-	return p.uuid.String()
+	return libuuid.UUID(p.uuid).String()
 }
 
 func (p *GSParams) ToArgs() []string {
 	return []string{
 		"-a", p.address,
-		"-p", p.port,
-		"-u", p.uuid.String(),
+		"-p", p.port.String(),
+		"-u", p.UuidString(),
 	}
 }
 
@@ -53,5 +54,5 @@ func (p *GSParams) NextMonitoringTimeout() time.Time {
 }
 
 func (p *GSParams) LogFormat(msg string) string {
-	return fmt.Sprintf("GS PROCESS [%s] ", p.uuid.String()) + msg
+	return fmt.Sprintf("GS PROCESS [%s] ", p.UuidString()) + msg
 }

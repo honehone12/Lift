@@ -9,8 +9,9 @@ import (
 )
 
 type GSMap struct {
-	count int
-	inner *sync.Map
+	count  int
+	inner  *sync.Map
+	logger logger.Logger
 }
 
 var (
@@ -18,10 +19,11 @@ var (
 	ErrorCastFail   = errors.New("failed to cast item")
 )
 
-func NewGSMap() *GSMap {
+func NewGSMap(logger logger.Logger) *GSMap {
 	return &GSMap{
-		count: 0,
-		inner: &sync.Map{},
+		count:  0,
+		inner:  &sync.Map{},
+		logger: logger,
 	}
 }
 
@@ -29,8 +31,8 @@ func (m *GSMap) Count() int {
 	return m.count
 }
 
-func (m *GSMap) Launch(params *gsparams.GSParams, logger logger.Logger) error {
-	gs, err := gs.NewGS(params, logger)
+func (m *GSMap) Launch(params *gsparams.GSParams) error {
+	gs, err := gs.NewGS(params, m.logger)
 	if err != nil {
 		return err
 	}
@@ -40,6 +42,7 @@ func (m *GSMap) Launch(params *gsparams.GSParams, logger logger.Logger) error {
 	}
 
 	m.add(params.UuidString(), gs)
+
 	return nil
 }
 

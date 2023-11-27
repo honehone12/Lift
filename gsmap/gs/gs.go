@@ -48,6 +48,7 @@ func (gs *GS) StartProcess() error {
 	}
 
 	gs.closingWait.Add(1)
+	gs.logger.Info(gs.params.LogFormat("gs successfully started"))
 	return nil
 }
 
