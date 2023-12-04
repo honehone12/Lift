@@ -88,26 +88,34 @@ func (b *Brain) Launch() (port.Port, error) {
 		return port.Port{}, err
 	}
 
+	id := param.UuidString()
 	if gs.StartProcess(func() error {
-		return b.portMan.Return(p)
+		if err := b.portMan.Return(p); err != nil {
+			return err
+		}
+
+		b.gsMap.Remove(id)
+		b.logger.Debugf(
+			"process id: %s removed from gsmap, returned port: %d",
+			id, p.Number(),
+		)
+		return nil
 	}); err != nil {
 		return port.Port{}, err
 	}
 
-	b.gsMap.Add(param.UuidString(), gs)
+	b.gsMap.Add(id, gs)
 	return p, nil
 }
 
 func (b *Brain) Shutdown(id string) error {
-	b.logger.Debugf("brain start closing process id: %s", id)
 	gs, err := b.gsMap.Item(id)
 	if err != nil {
 		return err
 	}
 
+	b.logger.Debugf("brain start closing process id: %s", id)
 	gs.EndProcess()
-	b.gsMap.Remove(id)
-	b.logger.Debugf("process id: %s removed from gsmap", id)
 	return nil
 }
 
@@ -139,7 +147,7 @@ LOOP:
 				info := infos[i]
 				summary := info.Summary
 				if now.Sub(summary.TimeStarted) > b.params.BrainMinimumWait {
-					if summary.ConnectionCount == 0 {
+					if summary.ConnectionCount <= 0 {
 						if err = b.Shutdown(info.ID); err != nil {
 							// the gs process will remain as zombie
 							b.logger.Panic(err)

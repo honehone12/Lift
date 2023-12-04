@@ -6,7 +6,6 @@ const (
 	MonitoringStatusError uint8 = iota
 	MonitoringStatusConnectionError
 	MonitoringStatusNotConnected
-	MonitoringStatusEstablished
 	MonitoringStatusOK
 	MonitoringStatusClosed
 )

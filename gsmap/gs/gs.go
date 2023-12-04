@@ -83,7 +83,7 @@ func (gs *GS) StartListen(conn *websocket.Conn) {
 
 	gs.conn = conn
 	gs.summary.TimeEstablished = time.Now()
-	gs.summary.MonitoringStatus = gsinfo.MonitoringStatusEstablished
+	gs.summary.MonitoringStatus = gsinfo.MonitoringStatusOK
 	gs.closingWait.Add(1)
 	go gs.listen()
 	go gs.wait()
@@ -91,10 +91,7 @@ func (gs *GS) StartListen(conn *websocket.Conn) {
 
 func (gs *GS) wait() {
 	gs.closingWait.Wait()
-	if gs.summary.MonitoringStatus != gsinfo.MonitoringStatusConnectionError {
-
-		gs.summary.MonitoringStatus = gsinfo.MonitoringStatusClosed
-	}
+	gs.summary.MonitoringStatus = gsinfo.MonitoringStatusClosed
 	gs.summary.TimeClosed = time.Now()
 	gs.summary.ConnectionCount = -1
 	gs.summary.SessionCount = -1
@@ -125,7 +122,7 @@ LOOP:
 			}
 			break LOOP
 		default:
-			if gs.conn == nil {
+			if gs.summary.MonitoringStatus != gsinfo.MonitoringStatusOK {
 				continue
 			}
 
@@ -139,9 +136,11 @@ LOOP:
 					"errror: %s, waiting for closing listening goroutine"),
 					err.Error(),
 				)
+
+				gs.summary.ConnectionCount = -1
+				gs.summary.SessionCount = -1
+				gs.summary.ActiveSessionCount = -1
 				gs.summary.MonitoringStatus = gsinfo.MonitoringStatusConnectionError
-				defer gs.conn.Close()
-				gs.conn = nil
 				continue
 			}
 
@@ -153,10 +152,11 @@ LOOP:
 
 			if m.ErrorCode == monitor.ErrorFatal {
 				gs.logger.Error(gs.params.LogWithId(string(m.ErrorUtf8)))
-				gs.summary.MonitoringStatus = gsinfo.MonitoringStatusError
-				// this is fatal error
-				// we'll close this gs
 
+				gs.summary.ConnectionCount = -1
+				gs.summary.SessionCount = -1
+				gs.summary.ActiveSessionCount = -1
+				gs.summary.MonitoringStatus = gsinfo.MonitoringStatusError
 				continue
 			} else if m.ErrorCode == monitor.ErrorWarn {
 				gs.logger.Warn(gs.params.LogWithId(string(m.ErrorUtf8)))
@@ -166,7 +166,6 @@ LOOP:
 			gs.summary.ConnectionCount = m.ConnectionCount
 			gs.summary.SessionCount = m.SessionCount
 			gs.summary.ActiveSessionCount = m.ActiveSessionCount
-			gs.summary.MonitoringStatus = gsinfo.MonitoringStatusOK
 		}
 	}
 

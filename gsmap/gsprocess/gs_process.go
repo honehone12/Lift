@@ -67,8 +67,8 @@ func (p *GSProcess) Start(onProcessClosed func()) error {
 	p.status = gsinfo.ProcessStatusOK
 	p.canceled = false
 	p.closingWait.Add(2)
-	go p.stdoutLog()
-	go p.stderrLog()
+	go p.stdoutLog(true)
+	go p.stdoutLog(false)
 	go p.wait()
 	return nil
 }
@@ -105,22 +105,41 @@ func (p *GSProcess) wait() {
 	p.onProcessClosed()
 }
 
-func (p *GSProcess) recoverStdoutLog() {
+func (p *GSProcess) recoverStdoutLog(errLog bool) {
 	if r := recover(); r != nil {
-		p.logger.Warn(p.params.LogWithId("recovering logging goroutine"))
-		go p.stdoutLog()
+		if errLog {
+			p.logger.Warn(p.params.LogWithId("recovering error logging goroutine"))
+		} else {
+			p.logger.Warn(p.params.LogWithId("recovering logging goroutine"))
+
+		}
+
+		go p.stdoutLog(errLog)
 	}
 }
 
-func (p *GSProcess) stdoutLog() {
-	defer p.recoverStdoutLog()
+func (p *GSProcess) stdoutLog(errLog bool) {
+	defer p.recoverStdoutLog(errLog)
 
-	reader := bufio.NewReader(p.stdout)
+	var reader *bufio.Reader
+	if errLog {
+		reader = bufio.NewReader(p.stderr)
+	} else {
+		reader = bufio.NewReader(p.stdout)
+	}
+
+	var closeCh chan bool
+	if errLog {
+		closeCh = p.closeChErr
+	} else {
+		closeCh = p.closeChLog
+	}
+
 	closing := false
 LOOP:
 	for {
 		select {
-		case <-p.closeChLog:
+		case <-closeCh:
 			break LOOP
 		default:
 			if closing {
@@ -128,61 +147,38 @@ LOOP:
 			}
 
 			line, err := reader.ReadString('\n')
-			if err != nil {
-				p.logger.Errorf(p.params.LogWithId(
-					"error: %s, waiting for closing logging goroutine"),
-					err.Error(),
-				)
-				closing = true
+			if errLog {
+				if err != nil {
+					p.logger.Errorf(p.params.LogWithId(
+						"error: %s, waiting for closing error logging goroutine"),
+						err.Error(),
+					)
+					closing = true
+					continue
+				}
+
+				p.logger.Error(p.params.LogWithId(line))
 				p.status = gsinfo.ProcessStatusError
-				continue
-			}
+			} else {
+				if err != nil {
+					p.logger.Errorf(p.params.LogWithId(
+						"error: %s, waiting for closing logging goroutine"),
+						err.Error(),
+					)
+					closing = true
+					p.status = gsinfo.ProcessStatusError
+					continue
+				}
 
-			p.logger.Info(p.params.LogWithId(line))
+				p.logger.Info(p.params.LogWithId(line))
+			}
 		}
 	}
 
-	p.logger.Debug(p.params.LogWithId("logging goroutine successfully closed"))
-	p.closingWait.Done()
-}
-
-func (p *GSProcess) recoverStderrLog() {
-	if r := recover(); r != nil {
-		p.logger.Warn(p.params.LogWithId("recovering error logging goroutine"))
-		go p.stderrLog()
+	if errLog {
+		p.logger.Debug(p.params.LogWithId("error logging goroutine successfully closed"))
+	} else {
+		p.logger.Debug(p.params.LogWithId("logging goroutine successfully closed"))
 	}
-}
-
-func (p *GSProcess) stderrLog() {
-	defer p.recoverStderrLog()
-
-	reader := bufio.NewReader(p.stderr)
-	closing := false
-LOOP:
-	for {
-		select {
-		case <-p.closeChErr:
-			break LOOP
-		default:
-			if closing {
-				continue
-			}
-
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				p.logger.Errorf(p.params.LogWithId(
-					"error: %s, waiting for closing error logging goroutine"),
-					err.Error(),
-				)
-				closing = true
-				continue
-			}
-
-			p.logger.Error(p.params.LogWithId(line))
-			p.status = gsinfo.ProcessStatusError
-		}
-	}
-
-	p.logger.Debug(p.params.LogWithId("error logging goroutine successfully closed"))
 	p.closingWait.Done()
 }
