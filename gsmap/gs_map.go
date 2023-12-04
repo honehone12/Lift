@@ -3,7 +3,7 @@ package gsmap
 import (
 	"errors"
 	"lift/gsmap/gs"
-	"lift/gsmap/gsparams"
+	"lift/gsmap/gsinfo"
 	"lift/logger"
 	"sync"
 )
@@ -31,28 +31,13 @@ func (m *GSMap) Count() int {
 	return m.count
 }
 
-func (m *GSMap) Launch(params *gsparams.GSParams) error {
-	gs, err := gs.NewGS(params, m.logger)
-	if err != nil {
-		return err
-	}
-
-	if gs.StartProcess(); err != nil {
-		return err
-	}
-
-	m.add(params.UuidString(), gs)
-
-	return nil
-}
-
-func (m *GSMap) add(id string, gs *gs.GS) {
+func (m *GSMap) Add(id string, gs *gs.GS) {
 	if _, exists := m.inner.LoadOrStore(id, gs); !exists {
 		m.count++
 	}
 }
 
-func (m *GSMap) remove(id string) {
+func (m *GSMap) Remove(id string) {
 	if _, exists := m.inner.LoadAndDelete(id); exists {
 		m.count--
 	}
@@ -71,4 +56,27 @@ func (m *GSMap) Item(id string) (*gs.GS, error) {
 	} else {
 		return nil, ErrorNoSuchItem
 	}
+}
+
+func (m *GSMap) UnsortedInfo() (*gsinfo.AllGSInfo, error) {
+	info := &gsinfo.AllGSInfo{
+		Count: int64(m.count),
+		Infos: make([]gsinfo.GSInfo, 0, m.count),
+	}
+
+	var err error
+	m.inner.Range(func(k interface{}, v interface{}) bool {
+		gs, ok := v.(*gs.GS)
+		if !ok {
+			err = ErrorCastFail
+			return false
+		}
+		info.Infos = append(info.Infos, gs.Info())
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
 }

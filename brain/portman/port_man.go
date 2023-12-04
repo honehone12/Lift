@@ -20,6 +20,11 @@ type PortMan struct {
 	m      *sync.Map
 }
 
+type PortInfo struct {
+	CurrentCapacity int64
+	Peek            uint16
+}
+
 var (
 	ErrorInvalidPortZero = errors.New("invalid port number zero")
 	ErrorCastFail        = errors.New("failed to cast interface")
@@ -56,8 +61,24 @@ func NewPortMan(params PortManParams) (*PortMan, error) {
 	}, nil
 }
 
-func (pm *PortMan) CurrentCapacity() int64 {
-	return pm.q.Len()
+func (pm *PortMan) Info() (PortInfo, error) {
+	i, err := pm.q.Peek()
+	if err != nil {
+		return PortInfo{
+			CurrentCapacity: 0,
+			Peek:            0,
+		}, nil
+	}
+
+	peek, ok := i.(port.Port)
+	if !ok {
+		return PortInfo{}, ErrorCastFail
+	}
+
+	return PortInfo{
+		CurrentCapacity: pm.q.Len(),
+		Peek:            peek.Number(),
+	}, nil
 }
 
 func (pm *PortMan) Next() (port.Port, error) {

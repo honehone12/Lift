@@ -6,6 +6,12 @@ type Port struct {
 	number uint16
 }
 
+func NilPort() Port {
+	return Port{
+		number: 0,
+	}
+}
+
 func NewPort(n uint16) Port {
 	return Port{
 		number: n,

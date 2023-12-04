@@ -4,6 +4,7 @@ import (
 	"lift/brain"
 	"lift/brain/portman"
 	"lift/gsmap"
+	"lift/gsmap/gsinfo"
 	"lift/server"
 	"lift/server/context"
 	"time"
@@ -13,31 +14,56 @@ import (
 )
 
 const (
+	LogLevel = log.INFO
+
 	ServiceName    = "LiftService"
 	ServiceVersion = "0.0.1"
 	ServerListenAt = "127.0.0.1:9990"
 
-	GSMonitoringTimeout = time.Second * 5
-	InitialGSProcesses  = 1
-	GSProcessName       = "dummy"
-	GSListenAddress     = "127.0.0.1"
+	InitialGSProcesses   = 0
+	GSProcessName        = "dummy"
+	GSListenAddress      = "127.0.0.1"
+	GSMonitoringTimeout  = time.Second * 5
+	GSConnectionCapacity = 2
 
 	PortCapacity  = 100
 	PortStartFrom = 7777
+
+	BrainLoopInterval = time.Second * 10
+	BrainMinimumWait  = time.Second * 10
 )
+
+func less(r *gsinfo.MonitoringSummary, l *gsinfo.MonitoringSummary) bool {
+	rAvailable := GSConnectionCapacity - r.ConnectionCount
+	lAvailable := GSConnectionCapacity - l.ConnectionCount
+
+	if rAvailable == lAvailable {
+		return r.TimeStarted.Before(l.TimeStarted)
+	}
+
+	return rAvailable < lAvailable
+}
 
 func Run() {
 	e := echo.New()
 	gsm := gsmap.NewGSMap(e.Logger)
-	b, err := brain.NewBrain(&brain.BrainParams{
-		GSProcessName:       GSProcessName,
-		GSListenAddress:     GSListenAddress,
-		GSMonitoringTimeout: GSMonitoringTimeout,
-		PortParams: portman.PortManParams{
-			InitialCapacity: PortCapacity,
-			StartFrom:       PortStartFrom,
+	b, err := brain.NewBrain(
+		&brain.BrainParams{
+			GSProcessName:        GSProcessName,
+			GSListenAddress:      GSListenAddress,
+			GSMonitoringTimeout:  GSMonitoringTimeout,
+			GSConnectionCapacity: GSConnectionCapacity,
+			PortParams: portman.PortManParams{
+				InitialCapacity: PortCapacity,
+				StartFrom:       PortStartFrom,
+			},
+			BrainLoopInterval: BrainLoopInterval,
+			BrainMinimumWait:  BrainMinimumWait,
 		},
-	}, gsm)
+		less,
+		gsm,
+		e.Logger,
+	)
 	if err != nil {
 		e.Logger.Fatal(err)
 	}
@@ -48,12 +74,14 @@ func Run() {
 			gsm,
 			b,
 		),
-		server.NewServerParams(ServerListenAt, log.DEBUG),
+		server.NewServerParams(ServerListenAt, LogLevel),
 	)
 	errCh := s.Run()
 
-	if err = b.Launch(InitialGSProcesses); err != nil {
-		e.Logger.Fatal(err)
+	for i := 0; i < InitialGSProcesses; i++ {
+		if _, err := b.Launch(); err != nil {
+			e.Logger.Fatal(err)
+		}
 	}
 
 	e.Logger.Fatal(<-errCh)

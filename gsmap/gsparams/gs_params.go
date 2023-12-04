@@ -41,6 +41,14 @@ func (p *GSParams) UuidString() string {
 	return libuuid.UUID(p.uuid).String()
 }
 
+func (p *GSParams) UuidRaw() []byte {
+	return p.uuid[:]
+}
+
+func (p *GSParams) Port() port.Port {
+	return p.port
+}
+
 func (p *GSParams) ToArgs() []string {
 	return []string{
 		"-a", p.address,
@@ -53,6 +61,6 @@ func (p *GSParams) NextMonitoringTimeout() time.Time {
 	return time.Now().Add(p.monitoringTimeout)
 }
 
-func (p *GSParams) LogFormat(msg string) string {
+func (p *GSParams) LogWithId(msg string) string {
 	return fmt.Sprintf("GS PROCESS [%s] ", p.UuidString()) + msg
 }

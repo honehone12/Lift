@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"lift/gsmap/monitor"
-	"math/rand"
 	"net/http"
 	"time"
 
@@ -31,12 +30,14 @@ func (h *DummyConnectionHandle) SendMonitoringMessage(param *DummyParams) {
 	ticker := time.Tick(time.Second)
 	rawUuid := param.RawUuid()
 
-	count := 0
-	add := 1
+	count := int64(1)
+	tick := 0
 
 	for range ticker {
-		if rand.Intn(100) == 7 {
-			panic("error of lucky 7")
+		tick++
+
+		if tick > 10 {
+			count = 0
 		}
 
 		msg := monitor.MonitoringMessage{
@@ -44,24 +45,19 @@ func (h *DummyConnectionHandle) SendMonitoringMessage(param *DummyParams) {
 			ConnectionCount:    count,
 			SessionCount:       count,
 			ActiveSessionCount: count,
+			ErrorCode:          monitor.NoError,
+			ErrorUtf8:          nil,
 		}
 		if err := h.conn.WriteJSON(&msg); err != nil {
 			panic(err)
 		}
 
-		if count == 10 {
-			add = -1
-		} else if count == 0 {
-			add = 1
-		}
-
-		count += add
-		fmt.Println("sent a monitoring message")
+		// fmt.Println("sent a monitoring message")
 	}
 }
 
 func serverURL(uuid string) string {
-	return fmt.Sprintf("ws://127.0.0.1:9990/connect/%s", uuid)
+	return fmt.Sprintf("ws://127.0.0.1:9990/process/connect/%s", uuid)
 }
 
 func parseFlags() *DummyParams {

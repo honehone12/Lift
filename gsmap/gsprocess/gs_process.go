@@ -3,8 +3,8 @@ package gsprocess
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"io"
+	"lift/gsmap/gsinfo"
 	"lift/gsmap/gsparams"
 	"lift/logger"
 	"os/exec"
@@ -18,9 +18,10 @@ type GSProcess struct {
 	stderr io.ReadCloser
 	logger logger.Logger
 
+	status          uint8
 	canceled        bool
-	cancelFunc      context.CancelFunc
-	processDoneFunc func()
+	cancel          context.CancelFunc
+	onProcessClosed func()
 	closingWait     sync.WaitGroup
 	closeChLog      chan bool
 	closeChErr      chan bool
@@ -37,8 +38,9 @@ func NewGSProcess(params *gsparams.GSParams, l logger.Logger) (*GSProcess, error
 		cmd:         cmd,
 		params:      params,
 		logger:      l,
+		status:      gsinfo.ProcessStatusNotStarted,
 		canceled:    true,
-		cancelFunc:  cancel,
+		cancel:      cancel,
 		closingWait: sync.WaitGroup{},
 		closeChLog:  make(chan bool),
 		closeChErr:  make(chan bool),
@@ -57,11 +59,12 @@ func NewGSProcess(params *gsparams.GSParams, l logger.Logger) (*GSProcess, error
 	return p, nil
 }
 
-func (p *GSProcess) Start(processDoneFunc func()) error {
+func (p *GSProcess) Start(onProcessClosed func()) error {
 	if err := p.cmd.Start(); err != nil {
 		return err
 	}
-	p.processDoneFunc = processDoneFunc
+	p.onProcessClosed = onProcessClosed
+	p.status = gsinfo.ProcessStatusOK
 	p.canceled = false
 	p.closingWait.Add(2)
 	go p.stdoutLog()
@@ -70,33 +73,41 @@ func (p *GSProcess) Start(processDoneFunc func()) error {
 	return nil
 }
 
-func (p *GSProcess) Cancel() {
+func (p *GSProcess) Status() uint8 {
+	return p.status
+}
+
+func (p *GSProcess) Close() {
 	if p.canceled {
 		return
 	}
 
+	if p.status != gsinfo.ProcessStatusError {
+		p.status = gsinfo.ProcessStatusCanceled
+	}
 	p.canceled = true
+	p.cancel()
 	p.closeChLog <- true
 	p.closeChErr <- true
-	p.cancelFunc()
 }
 
 func (p *GSProcess) wait() {
 	err := p.cmd.Wait()
 	if err.Error() == ErrorMessageOnKill {
-		p.logger.Info(p.params.LogFormat("killed"))
+		p.logger.Info(p.params.LogWithId("killed"))
 	} else if err != nil {
-		p.logger.Error(p.params.LogFormat(err.Error()))
+		p.status = gsinfo.ProcessStatusError
+		p.logger.Error(p.params.LogWithId(err.Error()))
 	}
-	p.Cancel()
+	p.Close()
 	p.closingWait.Wait()
-	p.logger.Info(p.params.LogFormat("gs process successfully closed"))
-	p.processDoneFunc()
+	p.logger.Debug(p.params.LogWithId("gs process successfully closed"))
+	p.onProcessClosed()
 }
 
 func (p *GSProcess) recoverStdoutLog() {
 	if r := recover(); r != nil {
-		p.logger.Warn(p.params.LogFormat("recovering logging goroutine"))
+		p.logger.Warn(p.params.LogWithId("recovering logging goroutine"))
 		go p.stdoutLog()
 	}
 }
@@ -118,24 +129,26 @@ LOOP:
 
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				p.logger.Error(p.params.LogFormat(fmt.Sprintf(
-					"error: %s, waiting for closing logging goroutine", err.Error(),
-				)))
+				p.logger.Errorf(p.params.LogWithId(
+					"error: %s, waiting for closing logging goroutine"),
+					err.Error(),
+				)
 				closing = true
+				p.status = gsinfo.ProcessStatusError
 				continue
 			}
 
-			p.logger.Info(p.params.LogFormat(line))
+			p.logger.Info(p.params.LogWithId(line))
 		}
 	}
 
-	p.logger.Debug(p.params.LogFormat("logging goroutine successfully closed"))
+	p.logger.Debug(p.params.LogWithId("logging goroutine successfully closed"))
 	p.closingWait.Done()
 }
 
 func (p *GSProcess) recoverStderrLog() {
 	if r := recover(); r != nil {
-		p.logger.Warn(p.params.LogFormat("recovering error logging goroutine"))
+		p.logger.Warn(p.params.LogWithId("recovering error logging goroutine"))
 		go p.stderrLog()
 	}
 }
@@ -157,17 +170,19 @@ LOOP:
 
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				p.logger.Error(p.params.LogFormat(fmt.Sprintf(
-					"error: %s, waiting for closing error logging goroutine", err.Error(),
-				)))
+				p.logger.Errorf(p.params.LogWithId(
+					"error: %s, waiting for closing error logging goroutine"),
+					err.Error(),
+				)
 				closing = true
 				continue
 			}
 
-			p.logger.Error(p.params.LogFormat(line))
+			p.logger.Error(p.params.LogWithId(line))
+			p.status = gsinfo.ProcessStatusError
 		}
 	}
 
-	p.logger.Debug(p.params.LogFormat("error logging goroutine successfully closed"))
+	p.logger.Debug(p.params.LogWithId("error logging goroutine successfully closed"))
 	p.closingWait.Done()
 }
