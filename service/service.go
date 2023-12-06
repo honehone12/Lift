@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	LogLevel = log.INFO
+	LogLevel = log.DEBUG
 
 	ServiceName    = "LiftService"
 	ServiceVersion = "0.0.1"
@@ -57,8 +57,8 @@ func Run() {
 				InitialCapacity: PortCapacity,
 				StartFrom:       PortStartFrom,
 			},
-			BrainLoopInterval: BrainLoopInterval,
-			BrainMinimumWait:  BrainMinimumWait,
+			LoopInterval:        BrainLoopInterval,
+			MinimumWaitForClose: BrainMinimumWait,
 		},
 		less,
 		gsm,

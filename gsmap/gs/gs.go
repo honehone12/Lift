@@ -8,6 +8,7 @@ import (
 	"lift/gsmap/monitor"
 	"lift/logger"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,7 +20,15 @@ type GS struct {
 	conn    *websocket.Conn
 	logger  logger.Logger
 
-	summary gsinfo.MonitoringSummary
+	timeStarted         *time.Time
+	timeEstablished     *atomic.Pointer[time.Time]
+	timeLastCommunicate *atomic.Pointer[time.Time]
+
+	lastConnectionCount    *atomic.Int64
+	lastSessionCount       *atomic.Int64
+	lastActiveSessionCount *atomic.Int64
+
+	fatal *atomic.Bool
 
 	onGSClosed  func() error
 	closingWait sync.WaitGroup
@@ -33,28 +42,36 @@ func NewGS(params *gsparams.GSParams, logger logger.Logger) (*GS, error) {
 	}
 
 	return &GS{
-		params:      params,
-		process:     process,
-		logger:      logger,
-		summary:     gsinfo.MonitoringSummary{},
-		closingWait: sync.WaitGroup{},
-		closeCh:     make(chan bool),
+		params:                 params,
+		process:                process,
+		logger:                 logger,
+		timeStarted:            nil,
+		timeEstablished:        &atomic.Pointer[time.Time]{},
+		timeLastCommunicate:    &atomic.Pointer[time.Time]{},
+		lastConnectionCount:    &atomic.Int64{},
+		lastSessionCount:       &atomic.Int64{},
+		lastActiveSessionCount: &atomic.Int64{},
+		fatal:                  &atomic.Bool{},
+		closingWait:            sync.WaitGroup{},
+		closeCh:                make(chan bool),
 	}, nil
 }
 
 func (gs *GS) StartProcess(onGSClosed func() error) error {
 	err := gs.process.Start(func() {
-		gs.closingWait.Done()
 		gs.closeCh <- true
+		gs.closingWait.Done()
 	})
 	if err != nil {
 		return err
 	}
 
-	gs.summary.TimeStarted = time.Now()
-	gs.summary.MonitoringStatus = gsinfo.MonitoringStatusNotConnected
+	now := time.Now()
+	gs.timeStarted = &now
 	gs.onGSClosed = onGSClosed
-	gs.closingWait.Add(1)
+	gs.closingWait.Add(2)
+	go gs.listen()
+	go gs.wait()
 	gs.logger.Info(gs.params.LogWithId("gs successfully started"))
 	return nil
 }
@@ -64,12 +81,28 @@ func (gs *GS) EndProcess() {
 }
 
 func (gs *GS) Info() gsinfo.GSInfo {
-	return gsinfo.GSInfo{
-		ID:            gs.params.UuidString(),
-		Port:          gs.params.Port().Number(),
-		ProcessStatus: gs.process.Status(),
-		Summary:       gs.summary,
+	i := gsinfo.GSInfo{
+		ID:   gs.params.UuidString(),
+		Port: gs.params.Port().Number(),
+		Summary: gsinfo.MonitoringSummary{
+			ConnectionCount:    gs.lastConnectionCount.Load(),
+			SessionCount:       gs.lastSessionCount.Load(),
+			ActiveSessionCount: gs.lastActiveSessionCount.Load(),
+		},
+		Fatal: gs.fatal.Load(),
 	}
+	var ptr *time.Time
+	if ptr = gs.timeStarted; ptr != nil {
+		i.Summary.TimeStarted = *ptr
+	}
+	if ptr = gs.timeEstablished.Load(); ptr != nil {
+		i.Summary.TimeEstablished = *ptr
+	}
+	if ptr = gs.timeLastCommunicate.Load(); ptr != nil {
+		i.Summary.TimeLastCommunicate = *ptr
+	}
+
+	return i
 }
 
 func (gs *GS) Established() bool {
@@ -81,21 +114,13 @@ func (gs *GS) StartListen(conn *websocket.Conn) {
 		return
 	}
 
+	now := time.Now()
+	gs.timeEstablished.Store(&now)
 	gs.conn = conn
-	gs.summary.TimeEstablished = time.Now()
-	gs.summary.MonitoringStatus = gsinfo.MonitoringStatusOK
-	gs.closingWait.Add(1)
-	go gs.listen()
-	go gs.wait()
 }
 
 func (gs *GS) wait() {
 	gs.closingWait.Wait()
-	gs.summary.MonitoringStatus = gsinfo.MonitoringStatusClosed
-	gs.summary.TimeClosed = time.Now()
-	gs.summary.ConnectionCount = -1
-	gs.summary.SessionCount = -1
-	gs.summary.ActiveSessionCount = -1
 	gs.logger.Info(gs.params.LogWithId("gs successfully closed"))
 }
 
@@ -109,6 +134,8 @@ func (gs *GS) recoverListen() {
 func (gs *GS) listen() {
 	defer gs.recoverListen()
 
+	connectionBroken := false
+
 LOOP:
 	for {
 		select {
@@ -116,18 +143,22 @@ LOOP:
 			if gs.conn != nil {
 				defer gs.conn.Close()
 			}
-			err := gs.onGSClosed()
-			if err != nil {
-				gs.logger.Warnf(gs.params.LogWithId("error on close"), err)
-			}
+			defer gs.onGSClosed()
 			break LOOP
 		default:
-			if gs.summary.MonitoringStatus != gsinfo.MonitoringStatusOK {
+			if gs.conn == nil {
+				continue
+			}
+
+			if connectionBroken {
 				continue
 			}
 
 			if err := gs.conn.SetReadDeadline(gs.params.NextMonitoringTimeout()); err != nil {
-				gs.logger.Panic(gs.params.LogWithId(err.Error()))
+				gs.logger.Panicf(gs.params.LogWithId(
+					"%s: this means time settting is broken"),
+					err.Error(),
+				)
 			}
 
 			m := monitor.MonitoringMessage{}
@@ -136,36 +167,33 @@ LOOP:
 					"errror: %s, waiting for closing listening goroutine"),
 					err.Error(),
 				)
-
-				gs.summary.ConnectionCount = -1
-				gs.summary.SessionCount = -1
-				gs.summary.ActiveSessionCount = -1
-				gs.summary.MonitoringStatus = gsinfo.MonitoringStatusConnectionError
+				connectionBroken = true
+				gs.fatal.Store(true)
 				continue
 			}
 
 			if !bytes.Equal(m.GuidRaw, gs.params.UuidRaw()) {
 				gs.logger.Warn(gs.params.LogWithId("received broken uuid"))
-				gs.summary.MonitoringStatus = gsinfo.MonitoringStatusConnectionError
+				connectionBroken = true
+				gs.fatal.Store(true)
 				continue
 			}
 
+			now := time.Now()
+			gs.timeLastCommunicate.Store(&now)
+
 			if m.ErrorCode == monitor.ErrorFatal {
 				gs.logger.Error(gs.params.LogWithId(string(m.ErrorUtf8)))
-
-				gs.summary.ConnectionCount = -1
-				gs.summary.SessionCount = -1
-				gs.summary.ActiveSessionCount = -1
-				gs.summary.MonitoringStatus = gsinfo.MonitoringStatusError
+				gs.fatal.Store(true)
 				continue
 			} else if m.ErrorCode == monitor.ErrorWarn {
 				gs.logger.Warn(gs.params.LogWithId(string(m.ErrorUtf8)))
 			}
 
 			gs.logger.Debugf(gs.params.LogWithId("%#v"), m)
-			gs.summary.ConnectionCount = m.ConnectionCount
-			gs.summary.SessionCount = m.SessionCount
-			gs.summary.ActiveSessionCount = m.ActiveSessionCount
+			gs.lastConnectionCount.Store(m.ConnectionCount)
+			gs.lastSessionCount.Store(m.SessionCount)
+			gs.lastActiveSessionCount.Store(m.ActiveSessionCount)
 		}
 	}
 

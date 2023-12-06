@@ -19,9 +19,9 @@ type BrainParams struct {
 	GSMonitoringTimeout  time.Duration
 	GSConnectionCapacity int
 
-	PortParams        portman.PortManParams
-	BrainLoopInterval time.Duration
-	BrainMinimumWait  time.Duration
+	PortParams          portman.PortManParams
+	LoopInterval        time.Duration
+	MinimumWaitForClose time.Duration
 }
 
 type Brain struct {
@@ -57,7 +57,7 @@ func NewBrain(
 		lessFunc: lessFunc,
 		gsMap:    gsMap,
 		logger:   logger,
-		ticker:   time.NewTicker(params.BrainLoopInterval),
+		ticker:   time.NewTicker(params.LoopInterval),
 		closeCh:  make(chan bool),
 	}
 
@@ -138,20 +138,37 @@ LOOP:
 		case <-b.ticker.C:
 			unsortedInfo, err := b.gsMap.UnsortedInfo()
 			if err != nil {
-				b.logger.Panic(err)
+				b.logger.Panicf(
+					"%s: this means stored type in map was not *GS",
+					err.Error(),
+				)
 			}
 
 			infos := unsortedInfo.Infos
 			now := time.Now()
 			for i, count := 0, len(infos); i < count; i++ {
 				info := infos[i]
-				summary := info.Summary
-				if now.Sub(summary.TimeStarted) > b.params.BrainMinimumWait {
-					if summary.ConnectionCount <= 0 {
-						if err = b.Shutdown(info.ID); err != nil {
-							// the gs process will remain as zombie
-							b.logger.Panic(err)
-						}
+				shutdown := info.Fatal
+
+				if !shutdown {
+					if now.Sub(info.Summary.TimeLastCommunicate) >= b.params.MinimumWaitForClose {
+						shutdown = true
+					}
+				}
+
+				if !shutdown {
+					if now.Sub(info.Summary.TimeStarted) >= b.params.MinimumWaitForClose {
+						shutdown = info.Summary.TimeEstablished.IsZero() ||
+							info.Summary.ConnectionCount == 0
+					}
+				}
+
+				if shutdown {
+					if err = b.Shutdown(info.ID); err != nil {
+						b.logger.Panicf(
+							"%s: this error means id was not found in map, the process will remain as zombie",
+							err.Error(),
+						)
 					}
 				}
 			}

@@ -2,27 +2,10 @@ package gsinfo
 
 import "time"
 
-const (
-	MonitoringStatusError uint8 = iota
-	MonitoringStatusConnectionError
-	MonitoringStatusNotConnected
-	MonitoringStatusOK
-	MonitoringStatusClosed
-)
-
-const (
-	ProcessStatusError uint8 = iota
-	ProcessStatusNotStarted
-	ProcessStatusOK
-	ProcessStatusCanceled
-)
-
 type MonitoringSummary struct {
-	MonitoringStatus uint8
-
-	TimeStarted     time.Time
-	TimeEstablished time.Time
-	TimeClosed      time.Time
+	TimeStarted         time.Time
+	TimeEstablished     time.Time
+	TimeLastCommunicate time.Time
 
 	ConnectionCount    int64
 	SessionCount       int64
@@ -30,10 +13,10 @@ type MonitoringSummary struct {
 }
 
 type GSInfo struct {
-	ID            string
-	Port          uint16
-	ProcessStatus uint8
-	Summary       MonitoringSummary
+	ID      string
+	Port    uint16
+	Summary MonitoringSummary
+	Fatal   bool
 }
 
 type AllGSInfo struct {
