@@ -4,7 +4,6 @@ import (
 	"lift/brain"
 	"lift/brain/portman"
 	"lift/gsmap"
-	"lift/gsmap/gsinfo"
 	"lift/server"
 	"lift/server/context"
 	"time"
@@ -14,7 +13,7 @@ import (
 )
 
 const (
-	LogLevel = log.DEBUG
+	LogLevel = log.INFO
 
 	ServiceName    = "LiftService"
 	ServiceVersion = "0.0.1"
@@ -33,17 +32,6 @@ const (
 	BrainMinimumWait  = time.Second * 10
 )
 
-func less(r *gsinfo.MonitoringSummary, l *gsinfo.MonitoringSummary) bool {
-	rAvailable := GSConnectionCapacity - r.ConnectionCount
-	lAvailable := GSConnectionCapacity - l.ConnectionCount
-
-	if rAvailable == lAvailable {
-		return r.TimeStarted.Before(l.TimeStarted)
-	}
-
-	return rAvailable < lAvailable
-}
-
 func Run() {
 	e := echo.New()
 	gsm := gsmap.NewGSMap(e.Logger)
@@ -60,7 +48,6 @@ func Run() {
 			LoopInterval:        BrainLoopInterval,
 			MinimumWaitForClose: BrainMinimumWait,
 		},
-		less,
 		gsm,
 		e.Logger,
 	)

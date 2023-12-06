@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"lift/gsmap/monitor"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -30,25 +31,19 @@ func (h *DummyConnectionHandle) SendMonitoringMessage(param *DummyParams) {
 	ticker := time.Tick(time.Second)
 	rawUuid := param.RawUuid()
 
-	count := int64(1)
-	tick := 0
-
 	for range ticker {
-		tick++
-
-		if tick < 15 {
-			count = 1
-			msg := monitor.MonitoringMessage{
-				GuidRaw:            rawUuid[:],
-				ConnectionCount:    count,
-				SessionCount:       count,
-				ActiveSessionCount: count,
-				ErrorCode:          monitor.NoError,
-				ErrorUtf8:          nil,
-			}
-			if err := h.conn.WriteJSON(&msg); err != nil {
-				panic(err)
-			}
+		count := rand.Int63n(2)
+		count++
+		msg := monitor.MonitoringMessage{
+			GuidRaw:            rawUuid[:],
+			ConnectionCount:    count,
+			SessionCount:       count,
+			ActiveSessionCount: count,
+			ErrorCode:          monitor.NoError,
+			ErrorUtf8:          nil,
+		}
+		if err := h.conn.WriteJSON(&msg); err != nil {
+			panic(err)
 		}
 		// fmt.Println("sent a monitoring message")
 	}

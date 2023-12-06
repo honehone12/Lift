@@ -2,12 +2,12 @@ package brain
 
 import (
 	"lift/brain/portman"
-	"lift/brain/portman/port"
 	"lift/gsmap"
 	"lift/gsmap/gs"
 	"lift/gsmap/gsinfo"
 	"lift/gsmap/gsparams"
 	"lift/logger"
+	"sort"
 	"time"
 
 	libuuid "github.com/google/uuid"
@@ -17,7 +17,7 @@ type BrainParams struct {
 	GSProcessName        string
 	GSListenAddress      string
 	GSMonitoringTimeout  time.Duration
-	GSConnectionCapacity int
+	GSConnectionCapacity int64
 
 	PortParams          portman.PortManParams
 	LoopInterval        time.Duration
@@ -27,8 +27,6 @@ type BrainParams struct {
 type Brain struct {
 	params  *BrainParams
 	portMan *portman.PortMan
-
-	lessFunc func(r, l *gsinfo.MonitoringSummary) bool
 
 	gsMap   *gsmap.GSMap
 	logger  logger.Logger
@@ -42,7 +40,6 @@ func GenerateId() [16]byte {
 
 func NewBrain(
 	params *BrainParams,
-	lessFunc func(r, l *gsinfo.MonitoringSummary) bool,
 	gsMap *gsmap.GSMap,
 	logger logger.Logger,
 ) (*Brain, error) {
@@ -52,13 +49,12 @@ func NewBrain(
 	}
 
 	b := &Brain{
-		params:   params,
-		portMan:  pm,
-		lessFunc: lessFunc,
-		gsMap:    gsMap,
-		logger:   logger,
-		ticker:   time.NewTicker(params.LoopInterval),
-		closeCh:  make(chan bool),
+		params:  params,
+		portMan: pm,
+		gsMap:   gsMap,
+		logger:  logger,
+		ticker:  time.NewTicker(params.LoopInterval),
+		closeCh: make(chan bool),
 	}
 
 	go b.brainMain()
@@ -70,10 +66,10 @@ func (b *Brain) PortMan() *portman.PortMan {
 	return b.portMan
 }
 
-func (b *Brain) Launch() (port.Port, error) {
+func (b *Brain) Launch() (*gsinfo.GSPort, error) {
 	p, err := b.portMan.Next()
 	if err != nil {
-		return port.Port{}, err
+		return nil, err
 	}
 
 	param := gsparams.NewGSParams(
@@ -85,7 +81,7 @@ func (b *Brain) Launch() (port.Port, error) {
 	)
 	gs, err := gs.NewGS(param, b.logger)
 	if err != nil {
-		return port.Port{}, err
+		return nil, err
 	}
 
 	id := param.UuidString()
@@ -101,11 +97,14 @@ func (b *Brain) Launch() (port.Port, error) {
 		)
 		return nil
 	}); err != nil {
-		return port.Port{}, err
+		return nil, err
 	}
 
 	b.gsMap.Add(id, gs)
-	return p, nil
+	return &gsinfo.GSPort{
+		Id:   id,
+		Port: p.Number(),
+	}, nil
 }
 
 func (b *Brain) Shutdown(id string) error {
@@ -164,7 +163,7 @@ LOOP:
 				}
 
 				if shutdown {
-					if err = b.Shutdown(info.ID); err != nil {
+					if err = b.Shutdown(info.Id); err != nil {
 						b.logger.Panicf(
 							"%s: this error means id was not found in map, the process will remain as zombie",
 							err.Error(),
@@ -176,4 +175,46 @@ LOOP:
 	}
 
 	b.logger.Info("brain closed")
+}
+
+func (b *Brain) BackfillList() ([]gsinfo.GSBackfillPort, error) {
+	unsortedInfo, err := b.gsMap.UnsortedInfo()
+	if err != nil {
+		return nil, err
+	}
+
+	sort.SliceStable(unsortedInfo.Infos, func(i, j int) bool {
+		infoI := unsortedInfo.Infos[i]
+		infoJ := unsortedInfo.Infos[j]
+
+		roomI := b.params.GSConnectionCapacity - infoI.Summary.ConnectionCount
+		roomJ := b.params.GSConnectionCapacity - infoJ.Summary.ConnectionCount
+
+		if roomI == roomJ {
+			return infoI.Summary.TimeStarted.Before(infoJ.Summary.TimeStarted)
+		} else {
+			return roomI < roomJ
+		}
+	})
+	sorted := unsortedInfo.Infos
+
+	count := len(sorted)
+	buff := make([]gsinfo.GSBackfillPort, 0, count)
+	for i := 0; i < count; i++ {
+		info := sorted[i]
+		if b.params.GSConnectionCapacity-info.Summary.ConnectionCount <= 0 {
+			continue
+		}
+
+		buff = append(buff, gsinfo.GSBackfillPort{
+			GsPort: gsinfo.GSPort{
+				Id:   info.Id,
+				Port: info.Port,
+			},
+			Since:  info.Summary.TimeStarted,
+			Active: info.Summary.ActiveSessionCount,
+		})
+	}
+
+	return buff, nil
 }

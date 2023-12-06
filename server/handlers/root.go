@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"lift/gsmap/gsinfo"
 	"lift/server/context"
 	"lift/server/errres"
 	"net/http"
@@ -27,7 +28,7 @@ func Root(c echo.Context) error {
 }
 
 type NextPortResponse struct {
-	Port uint16
+	GsPort gsinfo.GSPort
 }
 
 func NextPort(c echo.Context) error {
@@ -36,20 +37,28 @@ func NextPort(c echo.Context) error {
 		return errres.ServerError(err, c.Logger())
 	}
 
-	b := ctx.Components.Brain()
-	p, err := b.Launch()
+	p, err := ctx.Components.Brain().Launch()
 	if err != nil {
 		return errres.ServerError(err, c.Logger())
 	}
 
-	return c.JSON(http.StatusOK, NextPortResponse{
-		Port: p.Number(),
-	})
+	return c.JSON(http.StatusOK, NextPortResponse{GsPort: *p})
 }
 
-type NextBackfillPortResponse struct {
+type BackfillPortResponse struct {
+	List []gsinfo.GSBackfillPort
 }
 
-func NextBackfillPort(c echo.Context) error {
-	return errres.NotInService(c.Logger())
+func BackfillPort(c echo.Context) error {
+	ctx, err := context.FromEchoContext(c)
+	if err != nil {
+		return errres.ServerError(err, c.Logger())
+	}
+
+	backfillList, err := ctx.Brain().BackfillList()
+	if err != nil {
+		return errres.ServerError(err, c.Logger())
+	}
+
+	return c.JSON(http.StatusOK, BackfillPortResponse{List: backfillList})
 }

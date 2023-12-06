@@ -13,7 +13,7 @@ type MonitoringSummary struct {
 }
 
 type GSInfo struct {
-	ID      string
+	Id      string
 	Port    uint16
 	Summary MonitoringSummary
 	Fatal   bool
@@ -23,4 +23,15 @@ type AllGSInfo struct {
 	Count int64
 
 	Infos []GSInfo
+}
+
+type GSPort struct {
+	Id   string
+	Port uint16
+}
+
+type GSBackfillPort struct {
+	GsPort GSPort
+	Since  time.Time
+	Active int64
 }
