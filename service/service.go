@@ -47,7 +47,7 @@ func Run() {
 	gsm := gsmap.NewGSMap(e.Logger)
 	b, err := brain.NewBrain(
 		&brain.BrainParams{
-			GSProcess:        setting.GSProcess,
+			GSExecutables:    setting.GSExecutables,
 			GSListenAddress:  setting.GSListenAddress,
 			GSMessageTimeout: time.Second * time.Duration(setting.GSMessageTimeoutSec),
 			PortParams: portman.PortManParams{

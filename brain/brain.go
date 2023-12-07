@@ -16,7 +16,7 @@ import (
 )
 
 type BrainParams struct {
-	GSProcess        []setting.GSSetting
+	GSExecutables    []setting.GSExecutable
 	GSListenAddress  string
 	GSMessageTimeout time.Duration
 
@@ -71,12 +71,26 @@ func (b *Brain) PortMan() *portman.PortMan {
 	return b.portMan
 }
 
+func (b *Brain) ExecutableList() []gsinfo.GSClass {
+	count := len(b.params.GSExecutables)
+	list := make([]gsinfo.GSClass, 0, count)
+	for i := 0; i < count; i++ {
+		exe := b.params.GSExecutables[i]
+		list = append(list, gsinfo.GSClass{
+			Name:     exe.ProcessName,
+			Index:    int64(i),
+			Capacity: exe.ConnectionCapacity,
+		})
+	}
+	return list
+}
+
 func (b *Brain) ValidIndex(idx int) bool {
-	return idx >= 0 && idx < len(b.params.GSProcess)
+	return idx >= 0 && idx < len(b.params.GSExecutables)
 }
 
 func (b *Brain) Launch(idx int) (*gsinfo.GSPort, error) {
-	if idx < 0 || idx >= len(b.params.GSProcess) {
+	if idx < 0 || idx >= len(b.params.GSExecutables) {
 		return nil, ErrorIndexOutOfRange
 	}
 
@@ -87,7 +101,7 @@ func (b *Brain) Launch(idx int) (*gsinfo.GSPort, error) {
 
 	param := gsparams.NewGSParams(
 		idx,
-		b.params.GSProcess[idx].ProcessName,
+		b.params.GSExecutables[idx].ProcessName,
 		GenerateId(),
 		b.params.GSListenAddress,
 		p,
@@ -192,7 +206,7 @@ LOOP:
 }
 
 func (b *Brain) BackfillList(idx int) ([]gsinfo.GSBackfillPort, error) {
-	if idx < 0 || idx >= len(b.params.GSProcess) {
+	if idx < 0 || idx >= len(b.params.GSExecutables) {
 		return nil, ErrorIndexOutOfRange
 	}
 
@@ -203,7 +217,7 @@ func (b *Brain) BackfillList(idx int) ([]gsinfo.GSBackfillPort, error) {
 
 	total := len(unsortedInfo.Infos)
 	temp := make([]int, 0, total)
-	cap := b.params.GSProcess[idx].ConnectionCapacity
+	cap := b.params.GSExecutables[idx].ConnectionCapacity
 	for i := 0; i < total; i++ {
 		info := unsortedInfo.Infos[i]
 		if info.Index != idx {

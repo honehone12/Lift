@@ -16,7 +16,7 @@ var (
 	ErrorDuplicatedConnection = errors.New("attempt to duplicate connection")
 )
 
-func Connect(c echo.Context) error {
+func ProcessConnect(c echo.Context) error {
 	param := ConnectParam{
 		ProcessId: c.Param("id"),
 	}

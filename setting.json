@@ -5,8 +5,16 @@
 	"ServiceVersion": "0.0.1",
 	"ServiceListenAt": "127.0.0.1:9990",
 
-	"GSProcess": [
+	"GSExecutables": [
         {
+            "ProcessName": "dummy",
+            "ConnectionCapacity": 2
+        },
+		{
+            "ProcessName": "dummy",
+            "ConnectionCapacity": 2
+        },
+		{
             "ProcessName": "dummy",
             "ConnectionCapacity": 2
         }

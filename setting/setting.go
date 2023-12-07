@@ -1,6 +1,6 @@
 package setting
 
-type GSSetting struct {
+type GSExecutable struct {
 	ProcessName        string
 	ConnectionCapacity int64
 }
@@ -12,7 +12,7 @@ type Setting struct {
 	ServiceVersion  string
 	ServiceListenAt string
 
-	GSProcess           []GSSetting
+	GSExecutables       []GSExecutable
 	GSListenAddress     string
 	GSMessageTimeoutSec int
 

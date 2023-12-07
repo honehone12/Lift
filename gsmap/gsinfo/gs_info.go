@@ -26,6 +26,12 @@ type AllGSInfo struct {
 	Infos []GSInfo
 }
 
+type GSClass struct {
+	Name     string
+	Index    int64
+	Capacity int64
+}
+
 type GSPort struct {
 	Id   string
 	Port uint16

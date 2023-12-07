@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"lift/gsmap/gsinfo"
 	"lift/server/context"
 	"lift/server/errres"
 	"net/http"
@@ -8,14 +9,28 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+type ControlIndexResponse struct {
+	List []gsinfo.GSClass
+}
+
+func ControlIndex(c echo.Context) error {
+	ctx, err := context.FromEchoContext(c)
+	if err != nil {
+		return errres.ServerError(err, c.Logger())
+	}
+
+	return c.JSON(http.StatusOK, ControlIndexResponse{
+		List: ctx.Brain().ExecutableList(),
+	})
+}
+
 func ControlGSInfo(c echo.Context) error {
 	ctx, err := context.FromEchoContext(c)
 	if err != nil {
 		return errres.ServerError(err, c.Logger())
 	}
 
-	gsMap := ctx.Components.GSMap()
-	info, err := gsMap.UnsortedInfo()
+	info, err := ctx.GSMap().UnsortedInfo()
 	if err != nil {
 		return errres.ServerError(err, c.Logger())
 	}

@@ -59,8 +59,9 @@ func (s *Server) Run() <-chan error {
 	s.echo.GET("/nextport/:index", handlers.NextPort)
 	s.echo.GET("/backfillport/:index", handlers.BackfillPort)
 
-	s.echo.GET("/process/connect/:id", handlers.Connect)
+	s.echo.GET("/process/connect/:id", handlers.ProcessConnect)
 
+	s.echo.GET("/control", handlers.ControlIndex)
 	s.echo.GET("/control/gsinfo", handlers.ControlGSInfo)
 	s.echo.GET("/control/portinfo", handlers.ControlPortInfo)
 
