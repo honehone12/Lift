@@ -1,52 +1,61 @@
 package service
 
 import (
+	"encoding/json"
+	"io"
 	"lift/brain"
 	"lift/brain/portman"
 	"lift/gsmap"
 	"lift/server"
 	"lift/server/context"
+	"lift/setting"
+	"os"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 )
 
-const (
-	LogLevel = log.INFO
+func loadSetting(file string) (*setting.Setting, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
 
-	ServiceName    = "LiftService"
-	ServiceVersion = "0.0.1"
-	ServerListenAt = "127.0.0.1:9990"
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
 
-	InitialGSProcesses   = 0
-	GSProcessName        = "dummy"
-	GSListenAddress      = "127.0.0.1"
-	GSMonitoringTimeout  = time.Second * 5
-	GSConnectionCapacity = 2
+	s := &setting.Setting{}
+	err = json.Unmarshal(b, s)
+	if err != nil {
+		return nil, err
+	}
 
-	PortCapacity  = 100
-	PortStartFrom = 7777
-
-	BrainLoopInterval = time.Second * 10
-	BrainMinimumWait  = time.Second * 10
-)
+	return s, nil
+}
 
 func Run() {
 	e := echo.New()
+
+	setting, err := loadSetting("setting.json")
+	if err != nil {
+		e.Logger.Fatal(err)
+	}
+
 	gsm := gsmap.NewGSMap(e.Logger)
 	b, err := brain.NewBrain(
 		&brain.BrainParams{
-			GSProcessName:        GSProcessName,
-			GSListenAddress:      GSListenAddress,
-			GSMonitoringTimeout:  GSMonitoringTimeout,
-			GSConnectionCapacity: GSConnectionCapacity,
+			GSProcess:        setting.GSProcess,
+			GSListenAddress:  setting.GSListenAddress,
+			GSMessageTimeout: time.Second * time.Duration(setting.GSMessageTimeoutSec),
 			PortParams: portman.PortManParams{
-				InitialCapacity: PortCapacity,
-				StartFrom:       PortStartFrom,
+				InitialCapacity: setting.PortCapacity,
+				StartFrom:       setting.PortStartFrom,
 			},
-			LoopInterval:        BrainLoopInterval,
-			MinimumWaitForClose: BrainMinimumWait,
+			LoopInterval:        time.Second * time.Duration(setting.BrainIntervalSec),
+			MinimumWaitForClose: time.Second * time.Duration(setting.BrainMinimumWaitSec),
 		},
 		gsm,
 		e.Logger,
@@ -57,19 +66,13 @@ func Run() {
 
 	s := server.NewServer(e,
 		context.NewComponents(
-			context.NewMetadata(ServiceName, ServiceVersion),
+			context.NewMetadata(setting.ServiceName, setting.ServiceVersion),
 			gsm,
 			b,
 		),
-		server.NewServerParams(ServerListenAt, LogLevel),
+		server.NewServerParams(setting.ServiceListenAt, log.Lvl(setting.LogLevel)),
 	)
 	errCh := s.Run()
-
-	for i := 0; i < InitialGSProcesses; i++ {
-		if _, err := b.Launch(); err != nil {
-			e.Logger.Fatal(err)
-		}
-	}
 
 	e.Logger.Fatal(<-errCh)
 }

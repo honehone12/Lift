@@ -9,6 +9,7 @@ import (
 )
 
 type GSParams struct {
+	index   int
 	process string
 	uuid    [16]byte
 	address string
@@ -18,6 +19,7 @@ type GSParams struct {
 }
 
 func NewGSParams(
+	index int,
 	process string,
 	uuid [16]byte,
 	address string,
@@ -25,12 +27,17 @@ func NewGSParams(
 	monitoringTimeout time.Duration,
 ) *GSParams {
 	return &GSParams{
+		index:             index,
 		process:           process,
 		uuid:              uuid,
 		address:           address,
 		port:              port,
 		monitoringTimeout: monitoringTimeout,
 	}
+}
+
+func (p *GSParams) Index() int {
+	return p.index
 }
 
 func (p *GSParams) ProcessName() string {

@@ -13,6 +13,7 @@ type MonitoringSummary struct {
 }
 
 type GSInfo struct {
+	Index   int
 	Id      string
 	Port    uint16
 	Summary MonitoringSummary

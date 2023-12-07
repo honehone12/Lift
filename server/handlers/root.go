@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"lift/brain"
 	"lift/gsmap/gsinfo"
 	"lift/server/context"
 	"lift/server/errres"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 )
@@ -32,13 +34,22 @@ type NextPortResponse struct {
 }
 
 func NextPort(c echo.Context) error {
+	idxStr := c.Param("index")
+	idx, err := strconv.ParseInt(idxStr, 10, 64)
+	if err != nil {
+		return errres.BadRequest(err, c.Logger())
+	}
+
 	ctx, err := context.FromEchoContext(c)
 	if err != nil {
 		return errres.ServerError(err, c.Logger())
 	}
+	b := ctx.Brain()
 
-	p, err := ctx.Components.Brain().Launch()
-	if err != nil {
+	p, err := b.Launch(int(idx))
+	if err == brain.ErrorIndexOutOfRange {
+		return errres.BadRequest(err, c.Logger())
+	} else if err != nil {
 		return errres.ServerError(err, c.Logger())
 	}
 
@@ -50,13 +61,22 @@ type BackfillPortResponse struct {
 }
 
 func BackfillPort(c echo.Context) error {
+	idxStr := c.Param("index")
+	idx, err := strconv.ParseInt(idxStr, 10, 64)
+	if err != nil {
+		return errres.BadRequest(err, c.Logger())
+	}
+
 	ctx, err := context.FromEchoContext(c)
 	if err != nil {
 		return errres.ServerError(err, c.Logger())
 	}
+	b := ctx.Brain()
 
-	backfillList, err := ctx.Brain().BackfillList()
-	if err != nil {
+	backfillList, err := b.BackfillList(int(idx))
+	if err == brain.ErrorIndexOutOfRange {
+		return errres.BadRequest(err, c.Logger())
+	} else if err != nil {
 		return errres.ServerError(err, c.Logger())
 	}
 

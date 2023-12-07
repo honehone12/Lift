@@ -82,8 +82,9 @@ func (gs *GS) EndProcess() {
 
 func (gs *GS) Info() gsinfo.GSInfo {
 	i := gsinfo.GSInfo{
-		Id:   gs.params.UuidString(),
-		Port: gs.params.Port().Number(),
+		Index: gs.params.Index(),
+		Id:    gs.params.UuidString(),
+		Port:  gs.params.Port().Number(),
 		Summary: gsinfo.MonitoringSummary{
 			ConnectionCount:    gs.lastConnectionCount.Load(),
 			SessionCount:       gs.lastSessionCount.Load(),

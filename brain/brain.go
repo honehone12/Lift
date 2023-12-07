@@ -1,12 +1,14 @@
 package brain
 
 import (
+	"errors"
 	"lift/brain/portman"
 	"lift/gsmap"
 	"lift/gsmap/gs"
 	"lift/gsmap/gsinfo"
 	"lift/gsmap/gsparams"
 	"lift/logger"
+	"lift/setting"
 	"sort"
 	"time"
 
@@ -14,10 +16,9 @@ import (
 )
 
 type BrainParams struct {
-	GSProcessName        string
-	GSListenAddress      string
-	GSMonitoringTimeout  time.Duration
-	GSConnectionCapacity int64
+	GSProcess        []setting.GSSetting
+	GSListenAddress  string
+	GSMessageTimeout time.Duration
 
 	PortParams          portman.PortManParams
 	LoopInterval        time.Duration
@@ -33,6 +34,10 @@ type Brain struct {
 	ticker  *time.Ticker
 	closeCh chan bool
 }
+
+var (
+	ErrorIndexOutOfRange = errors.New("index is out of range GSProcess")
+)
 
 func GenerateId() [16]byte {
 	return libuuid.New()
@@ -66,18 +71,27 @@ func (b *Brain) PortMan() *portman.PortMan {
 	return b.portMan
 }
 
-func (b *Brain) Launch() (*gsinfo.GSPort, error) {
+func (b *Brain) ValidIndex(idx int) bool {
+	return idx >= 0 && idx < len(b.params.GSProcess)
+}
+
+func (b *Brain) Launch(idx int) (*gsinfo.GSPort, error) {
+	if idx < 0 || idx >= len(b.params.GSProcess) {
+		return nil, ErrorIndexOutOfRange
+	}
+
 	p, err := b.portMan.Next()
 	if err != nil {
 		return nil, err
 	}
 
 	param := gsparams.NewGSParams(
-		b.params.GSProcessName,
+		idx,
+		b.params.GSProcess[idx].ProcessName,
 		GenerateId(),
 		b.params.GSListenAddress,
 		p,
-		b.params.GSMonitoringTimeout,
+		b.params.GSMessageTimeout,
 	)
 	gs, err := gs.NewGS(param, b.logger)
 	if err != nil {
@@ -177,18 +191,36 @@ LOOP:
 	b.logger.Info("brain closed")
 }
 
-func (b *Brain) BackfillList() ([]gsinfo.GSBackfillPort, error) {
+func (b *Brain) BackfillList(idx int) ([]gsinfo.GSBackfillPort, error) {
+	if idx < 0 || idx >= len(b.params.GSProcess) {
+		return nil, ErrorIndexOutOfRange
+	}
+
 	unsortedInfo, err := b.gsMap.UnsortedInfo()
 	if err != nil {
 		return nil, err
 	}
 
-	sort.SliceStable(unsortedInfo.Infos, func(i, j int) bool {
-		infoI := unsortedInfo.Infos[i]
-		infoJ := unsortedInfo.Infos[j]
+	total := len(unsortedInfo.Infos)
+	temp := make([]int, 0, total)
+	cap := b.params.GSProcess[idx].ConnectionCapacity
+	for i := 0; i < total; i++ {
+		info := unsortedInfo.Infos[i]
+		if info.Index != idx {
+			continue
+		}
+		if cap-info.Summary.ConnectionCount <= 0 {
+			continue
+		}
 
-		roomI := b.params.GSConnectionCapacity - infoI.Summary.ConnectionCount
-		roomJ := b.params.GSConnectionCapacity - infoJ.Summary.ConnectionCount
+		temp = append(temp, i)
+	}
+
+	sort.SliceStable(temp, func(i, j int) bool {
+		infoI := unsortedInfo.Infos[temp[i]]
+		infoJ := unsortedInfo.Infos[temp[j]]
+		roomI := cap - infoI.Summary.ConnectionCount
+		roomJ := cap - infoJ.Summary.ConnectionCount
 
 		if roomI == roomJ {
 			return infoI.Summary.TimeStarted.Before(infoJ.Summary.TimeStarted)
@@ -196,16 +228,11 @@ func (b *Brain) BackfillList() ([]gsinfo.GSBackfillPort, error) {
 			return roomI < roomJ
 		}
 	})
-	sorted := unsortedInfo.Infos
 
-	count := len(sorted)
+	count := len(temp)
 	buff := make([]gsinfo.GSBackfillPort, 0, count)
 	for i := 0; i < count; i++ {
-		info := sorted[i]
-		if b.params.GSConnectionCapacity-info.Summary.ConnectionCount <= 0 {
-			continue
-		}
-
+		info := unsortedInfo.Infos[temp[i]]
 		buff = append(buff, gsinfo.GSBackfillPort{
 			GsPort: gsinfo.GSPort{
 				Id:   info.Id,

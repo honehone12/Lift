@@ -56,8 +56,8 @@ func (s *Server) Run() <-chan error {
 	s.echo.Use(middleware.Logger())
 
 	s.echo.GET("/", handlers.Root)
-	s.echo.GET("/nextport", handlers.NextPort)
-	s.echo.GET("/backfillport", handlers.BackfillPort)
+	s.echo.GET("/nextport/:index", handlers.NextPort)
+	s.echo.GET("/backfillport/:index", handlers.BackfillPort)
 
 	s.echo.GET("/process/connect/:id", handlers.Connect)
 

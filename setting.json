@@ -1,0 +1,22 @@
+{
+    "LogLevel": 2,
+
+	"ServiceName": "Lift",
+	"ServiceVersion": "0.0.1",
+	"ServiceListenAt": "127.0.0.1:9990",
+
+	"GSProcess": [
+        {
+            "ProcessName": "dummy",
+            "ConnectionCapacity": 2
+        }
+    ],
+	"GSListenAddress": "127.0.0.1",
+	"GSMessageTimeoutSec": 5,
+
+	"PortCapacity": 100,
+	"PortStartFrom": 7777,
+
+	"BrainIntervalSec": 10,
+	"BrainMinimumWaitSec": 10
+}
