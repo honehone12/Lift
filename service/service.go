@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"flag"
 	"io"
 	"lift/brain"
 	"lift/brain/portman"
@@ -15,6 +16,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 )
+
+func parseFlags() string {
+	fileName := flag.String("s", "setting.json", "setting file name")
+	flag.Parse()
+	return *fileName
+}
 
 func loadSetting(file string) (*setting.Setting, error) {
 	f, err := os.Open(file)
@@ -38,8 +45,8 @@ func loadSetting(file string) (*setting.Setting, error) {
 
 func Run() {
 	e := echo.New()
-
-	setting, err := loadSetting("setting.json")
+	fileName := parseFlags()
+	setting, err := loadSetting(fileName)
 	if err != nil {
 		e.Logger.Fatal(err)
 	}

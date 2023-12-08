@@ -3,6 +3,7 @@ package setting
 type GSExecutable struct {
 	ProcessName        string
 	ConnectionCapacity int64
+	MaxBackfillSec     int
 }
 
 type Setting struct {

@@ -8,15 +8,18 @@
 	"GSExecutables": [
         {
             "ProcessName": "dummy",
-            "ConnectionCapacity": 2
+            "ConnectionCapacity": 2,
+            "MaxBackfillSec": 60
         },
 		{
             "ProcessName": "dummy",
-            "ConnectionCapacity": 2
+            "ConnectionCapacity": 2,
+            "MaxBackfillSec": 60
         },
 		{
             "ProcessName": "dummy",
-            "ConnectionCapacity": 2
+            "ConnectionCapacity": 2,
+            "MaxBackfillSec": 60
         }
     ],
 	"GSListenAddress": "127.0.0.1",

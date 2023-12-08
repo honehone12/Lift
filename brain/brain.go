@@ -36,7 +36,7 @@ type Brain struct {
 }
 
 var (
-	ErrorIndexOutOfRange = errors.New("index is out of range GSProcess")
+	ErrorIndexOutOfRange = errors.New("index is out of range GSExecutables")
 )
 
 func GenerateId() [16]byte {
@@ -77,9 +77,10 @@ func (b *Brain) ExecutableList() []gsinfo.GSClass {
 	for i := 0; i < count; i++ {
 		exe := b.params.GSExecutables[i]
 		list = append(list, gsinfo.GSClass{
-			Name:     exe.ProcessName,
-			Index:    int64(i),
-			Capacity: exe.ConnectionCapacity,
+			Name:           exe.ProcessName,
+			Index:          int64(i),
+			Capacity:       exe.ConnectionCapacity,
+			MaxBackfillSec: int64(exe.MaxBackfillSec),
 		})
 	}
 	return list
@@ -172,14 +173,23 @@ LOOP:
 			}
 
 			infos := unsortedInfo.Infos
+			before := len(infos)
+			after := before
+			totalConn := 0
+			totalSession := 0
+			totalActiveSession := 0
 			now := time.Now()
-			for i, count := 0, len(infos); i < count; i++ {
+			for i := 0; i < before; i++ {
 				info := infos[i]
+				totalConn += int(info.Summary.ConnectionCount)
+				totalSession += int(info.Summary.SessionCount)
+				totalActiveSession += int(info.Summary.ActiveSessionCount)
 				shutdown := info.Fatal
 
 				if !shutdown {
-					if now.Sub(info.Summary.TimeLastCommunicate) >= b.params.MinimumWaitForClose {
-						shutdown = true
+					if !info.Summary.TimeLastCommunicate.IsZero() {
+						shutdown = now.Sub(info.Summary.TimeLastCommunicate) >=
+							b.params.MinimumWaitForClose
 					}
 				}
 
@@ -197,8 +207,18 @@ LOOP:
 							err.Error(),
 						)
 					}
+					after--
 				}
 			}
+
+			b.logger.Infof(
+				"[Brain regular log] process before: %d, process after: %d, total connection %d, total session: %d, total active session %d",
+				before,
+				after,
+				totalConn,
+				totalSession,
+				totalActiveSession,
+			)
 		}
 	}
 
@@ -216,14 +236,19 @@ func (b *Brain) BackfillList(idx int) ([]gsinfo.GSBackfillPort, error) {
 	}
 
 	total := len(unsortedInfo.Infos)
+	now := time.Now()
+	exe := b.params.GSExecutables[idx]
+	maxTimeBackfill := time.Second * time.Duration(exe.MaxBackfillSec)
 	temp := make([]int, 0, total)
-	cap := b.params.GSExecutables[idx].ConnectionCapacity
 	for i := 0; i < total; i++ {
 		info := unsortedInfo.Infos[i]
 		if info.Index != idx {
 			continue
 		}
-		if cap-info.Summary.ConnectionCount <= 0 {
+		if exe.ConnectionCapacity-info.Summary.ConnectionCount <= 0 {
+			continue
+		}
+		if now.Sub(info.Summary.TimeStarted) >= maxTimeBackfill {
 			continue
 		}
 
@@ -233,8 +258,8 @@ func (b *Brain) BackfillList(idx int) ([]gsinfo.GSBackfillPort, error) {
 	sort.SliceStable(temp, func(i, j int) bool {
 		infoI := unsortedInfo.Infos[temp[i]]
 		infoJ := unsortedInfo.Infos[temp[j]]
-		roomI := cap - infoI.Summary.ConnectionCount
-		roomJ := cap - infoJ.Summary.ConnectionCount
+		roomI := exe.ConnectionCapacity - infoI.Summary.ConnectionCount
+		roomJ := exe.ConnectionCapacity - infoJ.Summary.ConnectionCount
 
 		if roomI == roomJ {
 			return infoI.Summary.TimeStarted.Before(infoJ.Summary.TimeStarted)

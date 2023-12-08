@@ -27,9 +27,10 @@ type AllGSInfo struct {
 }
 
 type GSClass struct {
-	Name     string
-	Index    int64
-	Capacity int64
+	Name           string
+	Index          int64
+	Capacity       int64
+	MaxBackfillSec int64
 }
 
 type GSPort struct {
